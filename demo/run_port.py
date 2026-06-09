@@ -31,18 +31,26 @@ def main():
     containers = spawn_containers(200)
     cold_count = sum(1 for c in containers if c.cargo_type == "cold_chain")
     hazmat_count = sum(1 for c in containers if c.cargo_type == "hazmat")
+    customs_blocked = sum(1 for c in containers if not c.customs_cleared)
     print(f"\n  Spawned 200 containers:")
     print(f"     Standard:   {200 - cold_count - hazmat_count}")
     print(f"     Cold chain: {cold_count}")
     print(f"     Hazmat:     {hazmat_count}")
+    print(f"     Customs blocked: {customs_blocked}")
 
     # -- Run decentralised negotiation --
     print(f"\n  Running decentralised negotiation...")
     resources = PortResources()
     loop = NegotiationLoop(containers, resources)
     allocs = loop.run()
-    print(f"     [OK] Allocated {len(allocs)}/200 containers")
+    eligible = 200 - customs_blocked
+    print(f"     [OK] Allocated {len(allocs)}/{eligible} eligible containers")
     print(f"     {get_trace_count()} trace events recorded")
+    print(f"     {len(loop.round_history)} rounds across {loop.round_history[-1]['wave'] + 1 if loop.round_history else 0} waves")
+    if loop.violations:
+        print(f"     ⚠ {len(loop.violations)} constraint violations detected")
+        for v in loop.violations[:3]:
+            print(f"       - {v['type']}: {v['detail']}")
 
     # -- Save state for counterfactual replay --
     snap = loop.snapshot()
@@ -54,7 +62,7 @@ def main():
     print(f"\n  Running FIFO baseline...")
     fifo_resources = PortResources()
     fifo_allocs = run_fifo(containers, fifo_resources)
-    print(f"     [OK] FIFO allocated {len(fifo_allocs)}/200 containers")
+    print(f"     [OK] FIFO allocated {len(fifo_allocs)}/{eligible} eligible containers")
 
     # -- Comparison --
     improvement = (
