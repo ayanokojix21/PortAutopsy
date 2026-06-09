@@ -86,3 +86,8 @@ class PortResources:
                 for k, v in self.berths.items()
             },
         }
+
+    def is_refrigerated(self, crane_id: str) -> bool:
+        """Check if a crane is refrigerated."""
+        crane = self.cranes.get(crane_id)
+        return crane.refrigerated if crane else False

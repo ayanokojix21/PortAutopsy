@@ -11,6 +11,7 @@ import json
 import os
 import random
 from packages.autopsy_sdk import trace_agent
+from .containers import Container
 
 # ── Hero agents make real LLM calls; everyone else is mocked ─
 HERO_AGENTS = {
@@ -18,11 +19,20 @@ HERO_AGENTS = {
     "container_201", "container_099",
 }
 
+# Urgency → bid multiplier (higher urgency = higher bids)
+_URGENCY_MULTIPLIER = {
+    "LOW": 0.6,
+    "NORMAL": 0.8,
+    "HIGH": 1.0,
+    "CRITICAL": 1.2,
+}
+
 # ── Try to initialize Gemini client ──────────────────────────
 _LLM_AVAILABLE = False
 _gemini_client = None
 
 try:
+    # pyrefly: ignore [missing-import]
     from google import genai
     _api_key = os.environ.get("GEMINI_API_KEY")
     if _api_key:
@@ -32,10 +42,15 @@ except (ImportError, Exception):
     pass
 
 
-def _mock_decision(container, available_slots: list[str]) -> dict:
+def _mock_decision(
+    container: Container,
+    available_slots: list[str],
+    refrigerated_slots: list[str] | None = None,
+) -> dict:
     """
     Deterministic mock for non-hero agents.
     Prefers refrigerated slots for cold chain cargo.
+    Uses urgency to scale bid values.
     """
     if not available_slots:
         return {
@@ -45,37 +60,54 @@ def _mock_decision(container, available_slots: list[str]) -> dict:
             "chain_of_thought": "No slots available, waiting.",
         }
 
+    urgency_mult = _URGENCY_MULTIPLIER.get(container.urgency, 0.8)
+
     if container.cargo_type == "cold_chain" and container.temperature_constraint:
-        # Prefer refrigerated slots (crane_0, crane_6, crane_12, crane_18)
-        ref_slots = [
-            s for s in available_slots
-            if int(s.split("_")[1]) % 6 == 0
-        ]
-        if ref_slots:
+        # Use the provided refrigerated_slots list instead of parsing crane IDs
+        ref_available = []
+        if refrigerated_slots:
+            ref_available = [s for s in available_slots if s in refrigerated_slots]
+
+        if ref_available:
             return {
                 "action": "BID",
-                "slot": ref_slots[0],
-                "bid_value": round(random.uniform(0.6, 0.9), 2),
+                "slot": ref_available[0],
+                "bid_value": round(min(random.uniform(0.6, 0.9) * urgency_mult, 1.0), 2),
                 "chain_of_thought": (
                     f"Cold chain cargo (temp={container.temperature_constraint}°C). "
-                    f"Selected refrigerated slot {ref_slots[0]}."
+                    f"Selected refrigerated slot {ref_available[0]}."
                 ),
             }
+        # No refrigerated slots available — wait for next wave
+        return {
+            "action": "WAIT",
+            "slot": None,
+            "bid_value": 0.0,
+            "chain_of_thought": (
+                f"Cold chain cargo but no refrigerated slots free. "
+                f"Waiting for next round/wave."
+            ),
+        }
 
-    # Standard: pick a random available slot
+    # Standard / hazmat: pick a random available slot
     slot = random.choice(available_slots)
     return {
         "action": "BID",
         "slot": slot,
-        "bid_value": round(random.uniform(0.3, 0.7), 2),
+        "bid_value": round(min(random.uniform(0.3, 0.7) * urgency_mult, 1.0), 2),
         "chain_of_thought": (
-            f"Standard {container.cargo_type} cargo. "
-            f"Selected slot {slot} (cheapest available)."
+            f"Standard {container.cargo_type} cargo (urgency={container.urgency}). "
+            f"Selected slot {slot}."
         ),
     }
 
 
-def _llm_decision(agent_id: str, container, available_slots: list[str], round_num: int) -> dict:
+def _llm_decision(
+    agent_id: str,
+    container: Container,
+    available_slots: list[str],
+    round_num: int,
+) -> dict:
     """Real Gemini LLM call for hero agents."""
     prompt = f"""You are container agent {agent_id} in a port logistics simulation.
 
@@ -117,9 +149,10 @@ Pick the best slot for your cargo type. Cold chain cargo MUST use refrigerated s
 @trace_agent
 def container_decide(
     agent_id: str,
-    container,
+    container: Container,
     available_slots: list[str],
     round_num: int = 0,
+    refrigerated_slots: list[str] | None = None,
 ) -> dict:
     """
     Main agent decision function.
@@ -137,4 +170,4 @@ def container_decide(
     if agent_id in HERO_AGENTS and _LLM_AVAILABLE:
         return _llm_decision(agent_id, container, available_slots, round_num)
 
-    return _mock_decision(container, available_slots)
+    return _mock_decision(container, available_slots, refrigerated_slots)
