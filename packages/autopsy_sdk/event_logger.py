@@ -11,7 +11,7 @@ import json
 import sqlite3
 import pathlib
 import threading
-from .models import TraceEvent
+from .models import TraceEvent, DownstreamEffect
 
 # ── Configurable output paths ────────────────────────────────
 
