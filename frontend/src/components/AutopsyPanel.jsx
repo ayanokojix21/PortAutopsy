@@ -4,20 +4,25 @@ import CausalGraph from './CausalGraph';
 import mockReport from '../mock/autopsy_report.json';
 
 export default function AutopsyPanel({ onReportLoaded }) {
-  const [report, setReport]   = useState(null);
-  const [loading, setLoading] = useState(false);
+  const [report,   setReport]   = useState(null);
+  const [loading,  setLoading]  = useState(false);
+  const [demoMode, setDemoMode] = useState(false);
 
   const runAutopsy = async () => {
     setLoading(true);
+    setDemoMode(false);
     try {
       const res  = await fetch('http://localhost:8000/autopsy-report');
       const data = await res.json();
+      // If the server returned an error payload, fall back to demo
+      if (data?.error) throw new Error(data.error);
       setReport(data);
       setLoading(false);
       onReportLoaded?.();
     } catch {
       setTimeout(() => {
         setReport(mockReport);
+        setDemoMode(true);
         setLoading(false);
         onReportLoaded?.();
       }, 900);
@@ -29,6 +34,12 @@ export default function AutopsyPanel({ onReportLoaded }) {
       {/* Header */}
       <div className="section-header">
         <span className="section-title">Diagnostics</span>
+        {demoMode && (
+          <span className="tag tag-gray" style={{ fontSize: 10, marginLeft: 8 }}
+            title="Backend unreachable — showing pre-recorded demo data">
+            ⚠ Demo data
+          </span>
+        )}
         <button
           className="btn btn-primary"
           style={{ marginLeft: 'auto', padding: '7px 16px', fontSize: 12 }}
