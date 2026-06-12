@@ -1,18 +1,23 @@
 import { useEffect, useRef, useState } from 'react';
 import * as d3 from 'd3';
-import mockGraph from '../mock/causal_graph.json';
 
 export default function CausalGraph({ apiUrl = 'http://localhost:8000/causal-graph' }) {
   const ref = useRef();
-  const [data, setData] = useState(mockGraph);
+  const [data, setData]               = useState(null);  // null = not yet fetched
+  const [loading, setLoading]         = useState(true);
   const [selectedNode, setSelectedNode] = useState(null);
 
   useEffect(() => {
-    fetch(apiUrl).then(r => r.json()).then(d => { if (d?.nodes?.length) setData(d); }).catch(() => {});
+    setLoading(true);
+    fetch(apiUrl)
+      .then(r => r.json())
+      .then(d => { if (d?.nodes?.length) setData(d); })
+      .catch(() => {})
+      .finally(() => setLoading(false));
   }, [apiUrl]);
 
   useEffect(() => {
-    if (!ref.current) return;
+    if (!ref.current || !data) return;   // ← guard: skip render until data is loaded
     ref.current.innerHTML = '';
     const el = ref.current;
     const W = el.clientWidth || 440, H = 160;
@@ -87,7 +92,20 @@ export default function CausalGraph({ apiUrl = 'http://localhost:8000/causal-gra
   return (
     <div>
       <div className="info-label">Causal Graph</div>
+      {loading && (
+        <div className="skeleton" style={{ height: 160, marginTop: 8, borderRadius: 'var(--r-sm)' }} />
+      )}
+      {!loading && !data && (
+        <div style={{
+          height: 160, marginTop: 8, display: 'flex', alignItems: 'center', justifyContent: 'center',
+          border: '1px dashed rgba(255,255,255,0.08)', borderRadius: 'var(--r-sm)',
+          color: 'var(--t3)', fontSize: 12,
+        }}>
+          No graph data yet — run autopsy first
+        </div>
+      )}
       <div ref={ref} style={{
+        display: data ? 'block' : 'none',
         marginTop: 8,
         border: '1px solid rgba(255,255,255,0.08)',
         borderRadius: 'var(--r-sm)',
