@@ -1,0 +1,25 @@
+version: '3.8'
+
+services:
+  server:
+    build:
+      context: .
+      dockerfile: Dockerfile.server
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    volumes:
+      - ./traces.jsonl:/app/traces.jsonl
+      - ./traces.db:/app/traces.db
+      - ./saved_state.json:/app/saved_state.json
+      - ./autopsy_report.json:/app/autopsy_report.json
+
+  dashboard:
+    build:
+      context: frontend
+      dockerfile: Dockerfile
+    ports:
+      - "5173:5173"
+    depends_on:
+      - server
