@@ -1,5 +1,4 @@
 import { useState, useEffect } from 'react';
-import mockTraces from '../mock/traces.json';
 import { useEventStream } from '../hooks/useEventStream';
 
 const isFailure = (e) => {
@@ -32,7 +31,6 @@ export default function AgentTimeline({ apiUrl = 'http://localhost:8000/traces' 
 
   const allTraces = (() => {
     const merged = [...restTraces, ...wsEvents];
-    if (merged.length === 0) return mockTraces;
     const seen = new Set();
     return merged.filter(t => {
       if (seen.has(t.trace_id)) return false;
