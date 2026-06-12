@@ -382,3 +382,36 @@ body {
 .text-mint    { color: var(--teal)  !important; }
 .text-danger  { color: var(--rose)  !important; }
 .text-warning { color: var(--amber) !important; }
+
+/* ── PortMap grid cell animations ───────────────────────────── */
+
+/* Slide-in + spring pop when a crane slot gets allocated */
+@keyframes cell-appear {
+  0%   { opacity: 0; transform: scale(0.78); }
+  70%  { opacity: 1; transform: scale(1.06); }
+  100% { opacity: 1; transform: scale(1.00); }
+}
+.cell-appear {
+  animation: cell-appear 0.35s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+/* Pulsing red ring overlay for cold-chain violation cells */
+@keyframes pulse-violation {
+  0%, 100% { opacity: 0.75; r: 28px; }
+  50%       { opacity: 0.20; r: 36px; }
+}
+.violation-ring {
+  animation: pulse-violation 1.4s ease-in-out infinite;
+  transform-box: fill-box;
+  transform-origin: center;
+  pointer-events: none;
+}
+
+/* Breach tag pulse in header */
+@keyframes badge-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(251,113,133,0.5); }
+  50%       { box-shadow: 0 0 0 4px rgba(251,113,133,0); }
+}
+.tag-red { animation: badge-pulse 1.8s ease-in-out infinite; }
