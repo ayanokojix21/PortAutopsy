@@ -124,5 +124,13 @@ def get_trace_count() -> int:
 
 
 def clear_traces() -> None:
-    """Clear in-memory stream (does NOT delete JSONL/SQLite data)."""
+    """Clear in-memory stream and SQLite data for a fresh run."""
     clear()
+    if DB_PATH.exists():
+        try:
+            con = sqlite3.connect(str(DB_PATH))
+            con.execute("DELETE FROM trace_events")
+            con.commit()
+            con.close()
+        except Exception:
+            pass

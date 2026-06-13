@@ -6,6 +6,7 @@ export default function CausalGraph({ apiUrl = 'http://localhost:8000/causal-gra
   const [data, setData]               = useState(null);  // null = not yet fetched
   const [loading, setLoading]         = useState(true);
   const [selectedNode, setSelectedNode] = useState(null);
+  const [zoomLevel, setZoomLevel]     = useState(100);
 
   useEffect(() => {
     setLoading(true);
@@ -20,9 +21,13 @@ export default function CausalGraph({ apiUrl = 'http://localhost:8000/causal-gra
     if (!ref.current || !data) return;   // ← guard: skip render until data is loaded
     ref.current.innerHTML = '';
     const el = ref.current;
-    const W = el.clientWidth || 440, H = 160;
+    const W = el.clientWidth || 440, H = 200;
 
-    const svg = d3.select(el).append('svg').attr('width', '100%').attr('height', H);
+    const svg = d3.select(el).append('svg')
+      .attr('width', '100%')
+      .attr('height', H)
+      .style('cursor', 'grab');
+
     const defs = svg.append('defs');
 
     ['fail', 'ok'].forEach(type => {
@@ -31,6 +36,24 @@ export default function CausalGraph({ apiUrl = 'http://localhost:8000/causal-gra
         .attr('markerWidth', 4).attr('markerHeight', 4).attr('orient', 'auto')
         .append('path').attr('d', 'M0,0L8,4L0,8').attr('fill', 'none')
         .attr('stroke', type === 'fail' ? '#FB7185' : 'rgba(45,212,191,0.5)').attr('stroke-width', 1.5);
+    });
+
+    // ── Zoom container ──────────────────────────────────────────
+    const g = svg.append('g');
+
+    const zoom = d3.zoom()
+      .scaleExtent([0.3, 4])
+      .on('zoom', (event) => {
+        g.attr('transform', event.transform);
+        setZoomLevel(Math.round(event.transform.k * 100));
+      });
+
+    svg.call(zoom);
+
+    // Double-click to reset
+    svg.on('dblclick.zoom', () => {
+      svg.transition().duration(500)
+        .call(zoom.transform, d3.zoomIdentity);
     });
 
     const nodes = (data.nodes || []).map(n => ({ ...n }));
@@ -42,8 +65,7 @@ export default function CausalGraph({ apiUrl = 'http://localhost:8000/causal-gra
       .force('center', d3.forceCenter(W / 2, H / 2))
       .force('collide', d3.forceCollide(30));
 
-    const edgeG = svg.append('g');
-    const link = edgeG.selectAll('line').data(edges).join('line')
+    const link = g.append('g').selectAll('line').data(edges).join('line')
       .attr('stroke-width', 1.5)
       .attr('stroke', d => {
         const src = nodes.find(n => n.id === (d.source?.id || d.source));
@@ -55,14 +77,21 @@ export default function CausalGraph({ apiUrl = 'http://localhost:8000/causal-gra
         return src?.is_failure ? 'url(#arr-fail)' : 'url(#arr-ok)';
       });
 
-    const nodeG = svg.append('g');
-    const node = nodeG.selectAll('g').data(nodes).join('g')
+    const node = g.append('g').selectAll('g').data(nodes).join('g')
       .attr('cursor', 'pointer')
       .on('click', (_, d) => setSelectedNode(p => p?.id === d.id ? null : d))
       .call(d3.drag()
-        .on('start', (e, d) => { if (!e.active) sim.alphaTarget(0.3).restart(); d.fx = d.x; d.fy = d.y; })
+        .on('start', (e, d) => {
+          if (!e.active) sim.alphaTarget(0.3).restart();
+          d.fx = d.x; d.fy = d.y;
+          svg.style('cursor', 'grabbing');
+        })
         .on('drag',  (e, d) => { d.fx = e.x; d.fy = e.y; })
-        .on('end',   (e, d) => { if (!e.active) sim.alphaTarget(0); d.fx = null; d.fy = null; })
+        .on('end',   (e, d) => {
+          if (!e.active) sim.alphaTarget(0);
+          d.fx = null; d.fy = null;
+          svg.style('cursor', 'grab');
+        })
       );
 
     node.append('circle').attr('r', 20)
@@ -91,9 +120,28 @@ export default function CausalGraph({ apiUrl = 'http://localhost:8000/causal-gra
 
   return (
     <div>
-      <div className="info-label">Causal Graph</div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <div className="info-label" style={{ marginBottom: 0 }}>Causal Graph</div>
+        {data && (
+          <span style={{
+            fontSize: 9, color: 'var(--t3)',
+            background: 'rgba(255,255,255,0.04)',
+            border: '1px solid rgba(255,255,255,0.08)',
+            borderRadius: 12, padding: '1px 7px',
+            fontFamily: 'var(--mono)', fontWeight: 500,
+            marginLeft: 'auto',
+          }}>
+            {zoomLevel}%
+          </span>
+        )}
+      </div>
+      {data && (
+        <div style={{ fontSize: 9, color: 'var(--t3)', marginTop: 2, marginBottom: 4 }}>
+          Scroll to zoom · Drag to pan · Double-click to reset
+        </div>
+      )}
       {loading && (
-        <div className="skeleton" style={{ height: 160, marginTop: 8, borderRadius: 'var(--r-sm)' }} />
+        <div className="skeleton" style={{ height: 200, marginTop: 8, borderRadius: 'var(--r-sm)' }} />
       )}
       {!loading && !data && (
         <div style={{
@@ -111,7 +159,7 @@ export default function CausalGraph({ apiUrl = 'http://localhost:8000/causal-gra
         borderRadius: 'var(--r-sm)',
         background: 'rgba(2,6,23,0.50)',
         backdropFilter: 'blur(12px)',
-        overflow: 'hidden', minHeight: 160
+        overflow: 'hidden', minHeight: 200
       }} />
       {selectedNode && (
         <div className="node-inspector">

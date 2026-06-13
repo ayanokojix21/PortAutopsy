@@ -52,6 +52,7 @@
   --r-xs:   5px;
 
   --nav-h: 54px;
+  --ctrl-h: 46px;
 }
 
 /* ── Reset ───────────────────────────────────────────────────── */
@@ -91,8 +92,9 @@ body {
     transparent 70%
   );
 }
-
-.navbar, .layout { position: relative; z-index: 1; }
+.navbar { position: relative; z-index: 10; }
+.sim-controls { position: relative; z-index: 5; }
+.layout { position: relative; z-index: 1; }
 
 /* ── Scrollbar ───────────────────────────────────────────────── */
 ::-webkit-scrollbar { width: 3px; height: 3px; }
@@ -160,7 +162,7 @@ body {
   gap: 12px;
   padding: 12px;
   overflow: hidden;
-  height: calc(100vh - var(--nav-h));
+  height: calc(100vh - var(--nav-h) - var(--ctrl-h));
 }
 
 /* Left column: PortMap top, Telemetry bottom */
@@ -415,3 +417,148 @@ body {
   50%       { box-shadow: 0 0 0 4px rgba(251,113,133,0); }
 }
 .tag-red { animation: badge-pulse 1.8s ease-in-out infinite; }
+
+/* ── Simulation Controls Bar ─────────────────────────────────── */
+.sim-controls {
+  height: var(--ctrl-h);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 22px;
+  background: rgba(3,9,28,0.55);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border-bottom: 1px solid rgba(255,255,255,0.05);
+  flex-shrink: 0;
+}
+
+.sim-status {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 4px 12px;
+  background: rgba(255,255,255,0.03);
+  border: 1px solid rgba(255,255,255,0.07);
+  border-radius: 20px;
+  min-width: 120px;
+}
+
+.sim-status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  transition: background 0.3s, box-shadow 0.3s;
+}
+
+.btn-sim {
+  background: linear-gradient(140deg, #0f766e 0%, #0e7490 100%);
+  color: rgba(255,255,255,0.92);
+  border: 1px solid rgba(45,212,191,0.25);
+  padding: 6px 16px;
+  font-size: 11px;
+  font-weight: 600;
+  font-family: var(--font);
+  border-radius: var(--r);
+  cursor: pointer;
+  transition: opacity 0.15s, transform 0.15s;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.btn-sim:hover:not(:disabled) { opacity: 0.88; transform: translateY(-1px); }
+.btn-sim:disabled { opacity: 0.35; cursor: not-allowed; }
+
+.btn-inject {
+  background: rgba(251,113,133,0.08);
+  color: var(--rose);
+  border: 1px solid rgba(251,113,133,0.2);
+  padding: 6px 14px;
+  font-size: 11px;
+  font-weight: 600;
+  font-family: var(--font);
+  border-radius: var(--r);
+  cursor: pointer;
+  transition: opacity 0.15s, transform 0.15s, background 0.15s;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.btn-inject:hover:not(:disabled) {
+  background: rgba(251,113,133,0.14);
+  transform: translateY(-1px);
+}
+.btn-inject:disabled { opacity: 0.35; cursor: not-allowed; }
+
+.sim-dropdown-wrap {
+  position: relative;
+}
+
+.sim-dropdown {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  min-width: 280px;
+  background: rgba(3,9,28,0.95);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: var(--r);
+  box-shadow: 0 12px 40px rgba(0,0,0,0.5);
+  padding: 6px;
+  z-index: 50;
+  animation: dropdown-in 0.15s ease-out;
+}
+
+@keyframes dropdown-in {
+  from { opacity: 0; transform: translateY(-6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.sim-dropdown-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 100%;
+  padding: 8px 12px;
+  border: none;
+  background: transparent;
+  color: var(--t1);
+  font-family: var(--font);
+  text-align: left;
+  cursor: pointer;
+  border-radius: var(--r-sm);
+  transition: background 0.12s;
+}
+.sim-dropdown-item:hover:not(:disabled) {
+  background: rgba(255,255,255,0.06);
+}
+.sim-dropdown-item:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* ── Spin animation for loading buttons ──────────────────────── */
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+.spin {
+  display: inline-block;
+  animation: spin 0.8s linear infinite;
+}
+
+/* ── Recharts overrides — match dark theme ───────────────────── */
+.recharts-brush-slide {
+  fill: rgba(103,232,249,0.06) !important;
+  stroke: rgba(103,232,249,0.2) !important;
+}
+.recharts-brush-traveller rect {
+  fill: rgba(103,232,249,0.25) !important;
+  stroke: rgba(103,232,249,0.4) !important;
+  rx: 3;
+}
+.recharts-brush-texts text {
+  fill: var(--t3) !important;
+  font-size: 9px !important;
+}

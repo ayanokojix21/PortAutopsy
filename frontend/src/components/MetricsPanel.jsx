@@ -1,97 +1,85 @@
-import { useState, useEffect, useRef } from 'react';
-import { useCountUp } from '../hooks/useCountUp';
+import { useMemo } from 'react';
+import {
+  BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell,
+  AreaChart, Area, Brush, CartesianGrid, Legend,
+} from 'recharts';
+import { useMetricsHistory } from '../hooks/useMetricsHistory';
 
-// ── Static fallback / baseline values ─────────────────────────────────────
-// These are used when the backend has no traces yet (pre-simulation).
-// Once the server responds from /metrics, live agent data overrides the
-// agent column while FIFO stays as the "baseline" anchor.
+// ── Fallback only used when backend is fully unreachable ──────────
 const FALLBACK = {
   fifo:  { throughput: 100, violations: 3, dwell: 4.2, debug: 'Manual' },
   agent: { throughput: 123, violations: 0, dwell: 2.8, debug: '8 sec (autopsy)' },
-  fixed: { throughput: 127, violations: 0, dwell: 2.6, debug: '8 sec (autopsy)' },
 };
 
-const ROWS = [
-  { label: 'Throughput',  key: 'throughput', fmt: v => `${v}%` },
-  { label: 'Cold Faults', key: 'violations', fmt: v => v },
-  { label: 'Avg Dwell',   key: 'dwell',      fmt: v => `${v}h` },
-  { label: 'Diag. Time',  key: 'debug',      fmt: v => v },
-];
-
-// ── Animated number cell ───────────────────────────────────────────────────
-function AnimatedCell({ value, fmt, animate }) {
-  const n = useCountUp(typeof value === 'number' ? value : 0, 900, animate);
-  return <>{fmt(typeof value === 'number' ? n : value)}</>;
+// ── Custom tooltip ────────────────────────────────────────────────
+function CustomTooltip({ active, payload, label }) {
+  if (!active || !payload?.length) return null;
+  return (
+    <div style={{
+      background: 'rgba(2,6,23,0.92)',
+      border: '1px solid rgba(255,255,255,0.12)',
+      borderRadius: 8,
+      padding: '10px 14px',
+      backdropFilter: 'blur(12px)',
+      fontSize: 11,
+    }}>
+      <div style={{ color: 'var(--t3)', fontSize: 10, marginBottom: 6, fontWeight: 600 }}>{label}</div>
+      {payload.map((p, i) => (
+        <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 3 }}>
+          <span style={{ width: 8, height: 8, borderRadius: '50%', background: p.color, flexShrink: 0 }} />
+          <span style={{ color: 'var(--t2)' }}>{p.name}:</span>
+          <span style={{ color: 'var(--t1)', fontWeight: 600, fontFamily: 'var(--mono)' }}>{p.value}%</span>
+        </div>
+      ))}
+    </div>
+  );
 }
 
-// ── Poll /metrics every 5 s ───────────────────────────────────────────────
-function useMetrics(apiUrl = 'http://localhost:8000/metrics') {
-  const [liveAgent, setLiveAgent]   = useState(null); // null = not yet fetched
-  const [liveFifo,  setLiveFifo]    = useState(null);
-  const [status,    setStatus]      = useState('idle'); // 'idle' | 'live' | 'error'
-  const timerRef = useRef(null);
-
-  useEffect(() => {
-    let mounted = true;
-
-    const fetch_ = () => {
-      fetch(apiUrl)
-        .then(r => r.json())
-        .then(data => {
-          if (!mounted) return;
-          // Server returns { agent: {...}, fifo: {...} }
-          // Only update if the response has real data (not an error or empty object)
-          if (data?.agent && Object.keys(data.agent).length > 0 && !data.error) {
-            setLiveAgent(data.agent);
-            setStatus('live');
-          }
-          if (data?.fifo && Object.keys(data.fifo).length > 0) {
-            setLiveFifo(data.fifo);
-          }
-        })
-        .catch(() => {
-          if (mounted) setStatus('error');
-        });
-    };
-
-    fetch_(); // immediate first fetch
-    timerRef.current = setInterval(fetch_, 5000);
-
-    return () => {
-      mounted = false;
-      clearInterval(timerRef.current);
-    };
-  }, [apiUrl]);
-
-  return { liveAgent, liveFifo, status };
+function DwellTooltip({ active, payload, label }) {
+  if (!active || !payload?.length) return null;
+  return (
+    <div style={{
+      background: 'rgba(2,6,23,0.92)',
+      border: '1px solid rgba(255,255,255,0.12)',
+      borderRadius: 8,
+      padding: '10px 14px',
+      backdropFilter: 'blur(12px)',
+      fontSize: 11,
+    }}>
+      <div style={{ color: 'var(--t3)', fontSize: 10, marginBottom: 6, fontWeight: 600 }}>{label}</div>
+      {payload.map((p, i) => (
+        <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 3 }}>
+          <span style={{ width: 8, height: 8, borderRadius: '50%', background: p.color, flexShrink: 0 }} />
+          <span style={{ color: 'var(--t2)' }}>{p.name}:</span>
+          <span style={{ color: 'var(--t1)', fontWeight: 600, fontFamily: 'var(--mono)' }}>{p.value}h</span>
+        </div>
+      ))}
+    </div>
+  );
 }
 
-// ── Component ─────────────────────────────────────────────────────────────
+// ── Component ─────────────────────────────────────────────────────
 export default function MetricsPanel({ showFixed = false }) {
-  const { liveAgent, liveFifo, status } = useMetrics();
+  const { history, latest, status } = useMetricsHistory();
 
-  // Merge live data over the static fallbacks.
-  // FIFO is kept as the "baseline" anchor (live FIFO only updates if server gives it).
-  const fifo  = { ...FALLBACK.fifo,  ...(liveFifo  || {}) };
-  const agent = { ...FALLBACK.agent, ...(liveAgent  || {}) };
-  const fixed = { ...FALLBACK.fixed };
+  // Merge live data with fallbacks
+  const fifo  = { ...FALLBACK.fifo,  ...(latest?.fifo  || {}) };
+  const agent = { ...FALLBACK.agent, ...(latest?.agent || {}) };
 
-  // Recompute deltas from actual numbers
   const agentGain = agent.throughput - fifo.throughput;
-  const fixGain   = fixed.throughput - fifo.throughput;
 
-  const cols = showFixed
-    ? [['FIFO', fifo, false], ['Agents', agent, false], ['Patched', fixed, true]]
-    : [['FIFO', fifo, false], ['Agents', agent, false]];
+  // ── Bar chart data — comparison snapshot ──
+  const barData = useMemo(() => [
+    { name: 'Throughput',  FIFO: fifo.throughput,  Agent: agent.throughput },
+    { name: 'Violations',  FIFO: fifo.violations,  Agent: agent.violations },
+  ], [fifo.throughput, fifo.violations, agent.throughput, agent.violations]);
 
   return (
     <div>
       {/* ── Header ── */}
       <div className="section-header">
         <span className="section-title">System Metrics</span>
-
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginLeft: 'auto' }}>
-          {/* Live data indicator */}
           {status === 'live' && (
             <span style={{
               display: 'inline-flex', alignItems: 'center', gap: 5,
@@ -104,7 +92,7 @@ export default function MetricsPanel({ showFixed = false }) {
                 width: 5, height: 5, borderRadius: '50%',
                 background: 'var(--teal)',
                 boxShadow: '0 0 6px var(--teal)',
-                animation: 'pulse 2s infinite',
+                animation: 'pulse-dot 2s infinite',
                 flexShrink: 0,
               }} />
               Live
@@ -112,7 +100,7 @@ export default function MetricsPanel({ showFixed = false }) {
           )}
           {status === 'error' && (
             <span style={{
-              fontSize: 10, color: 'var(--text-mid)',
+              fontSize: 10, color: 'var(--t3)',
               background: 'rgba(255,255,255,0.04)',
               border: '1px solid rgba(255,255,255,0.08)',
               borderRadius: 20, padding: '2px 8px',
@@ -127,12 +115,7 @@ export default function MetricsPanel({ showFixed = false }) {
       </div>
 
       {/* ── Delta KPI strip ── */}
-      <div style={{
-        display: 'grid',
-        gridTemplateColumns: showFixed ? 'repeat(3,1fr)' : 'repeat(2,1fr)',
-        gap: 8, marginBottom: 16,
-      }}>
-        {/* Baseline — shows FIFO throughput as the reference anchor */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 8, marginBottom: 14 }}>
         <div className="kpi-card" style={{ textAlign: 'center' }}>
           <div style={{ fontSize: 17, fontWeight: 600, color: 'var(--t2)' }}>
             {fifo.throughput}%
@@ -142,8 +125,6 @@ export default function MetricsPanel({ showFixed = false }) {
             textTransform: 'uppercase', letterSpacing: '0.08em',
           }}>FIFO Baseline</div>
         </div>
-
-        {/* Agent lift */}
         <div className="kpi-card" style={{ textAlign: 'center', borderColor: 'rgba(103,232,249,0.2)' }}>
           <div style={{ fontSize: 17, fontWeight: 600, color: '#67E8F9' }}>
             {agentGain >= 0 ? '+' : ''}{agentGain}%
@@ -153,60 +134,123 @@ export default function MetricsPanel({ showFixed = false }) {
             textTransform: 'uppercase', letterSpacing: '0.08em',
           }}>Agent Lift</div>
         </div>
-
-        {/* Patched lift */}
-        {showFixed && (
-          <div className="kpi-card" style={{ textAlign: 'center', borderColor: 'rgba(45,212,191,0.25)' }}>
-            <div style={{ fontSize: 17, fontWeight: 600, color: '#2DD4BF' }}>
-              {fixGain >= 0 ? '+' : ''}{fixGain}%
-            </div>
-            <div style={{
-              fontSize: 10, color: 'var(--t2)', marginTop: 3,
-              textTransform: 'uppercase', letterSpacing: '0.08em',
-            }}>Final Lift</div>
+        <div className="kpi-card" style={{ textAlign: 'center', borderColor: 'rgba(251,113,133,0.2)' }}>
+          <div style={{ fontSize: 17, fontWeight: 600, color: agent.violations > 0 ? '#FB7185' : '#2DD4BF' }}>
+            {agent.violations}
           </div>
-        )}
+          <div style={{
+            fontSize: 10, color: 'var(--t2)', marginTop: 3,
+            textTransform: 'uppercase', letterSpacing: '0.08em',
+          }}>Violations</div>
+        </div>
       </div>
 
-      {/* ── Metrics table ── */}
-      <table className="metrics-table">
-        <thead>
-          <tr>
-            {['Metric', ...cols.map(([n]) => n)].map((h, i) => (
-              <th key={i}>{h}</th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {ROWS.map(row => (
-            <tr key={row.key}>
-              <td>{row.label}</td>
-              {cols.map(([name, data, animate]) => (
-                <td
-                  key={name}
-                  style={{
-                    color:
-                      row.key === 'violations' && data[row.key] > 0
-                        ? 'var(--rose)'
-                        : animate
-                          ? 'var(--teal)'
-                          : name === 'Agents' && row.key !== 'violations'
-                            ? 'var(--cyan)'
-                            : undefined,
-                    fontWeight: animate ? 600 : 400,
-                  }}
-                >
-                  <AnimatedCell
-                    value={data[row.key]}
-                    fmt={row.fmt}
-                    animate={animate && showFixed}
+      {/* ── Bar Chart: FIFO vs Agent ── */}
+      <div style={{ marginBottom: 14 }}>
+        <div className="info-label">FIFO vs Agent Comparison</div>
+        <div style={{
+          background: 'rgba(2,6,23,0.4)', borderRadius: 'var(--r-sm)',
+          border: '1px solid rgba(255,255,255,0.06)', padding: '8px 4px',
+        }}>
+          <ResponsiveContainer width="100%" height={120}>
+            <BarChart data={barData} barGap={6} barSize={28}>
+              <XAxis
+                dataKey="name"
+                tick={{ fill: 'rgba(100,116,139,0.6)', fontSize: 10 }}
+                axisLine={false} tickLine={false}
+              />
+              <YAxis hide />
+              <Tooltip content={<CustomTooltip />} cursor={{ fill: 'rgba(255,255,255,0.03)' }} />
+              <Bar dataKey="FIFO" radius={[4, 4, 0, 0]} name="FIFO">
+                {barData.map((_, i) => (
+                  <Cell key={i} fill="rgba(148,163,184,0.25)" stroke="rgba(148,163,184,0.4)" strokeWidth={1} />
+                ))}
+              </Bar>
+              <Bar dataKey="Agent" radius={[4, 4, 0, 0]} name="Agent">
+                {barData.map((entry, i) => (
+                  <Cell
+                    key={i}
+                    fill={entry.name === 'Violations' ? 'rgba(251,113,133,0.25)' : 'rgba(103,232,249,0.2)'}
+                    stroke={entry.name === 'Violations' ? 'rgba(251,113,133,0.5)' : 'rgba(103,232,249,0.5)'}
+                    strokeWidth={1}
                   />
-                </td>
-              ))}
-            </tr>
-          ))}
-        </tbody>
-      </table>
+                ))}
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      </div>
+
+      {/* ── Time Series: Throughput over time with Brush zoom ── */}
+      {history.length > 1 && (
+        <div>
+          <div className="info-label">Throughput Timeline — scroll to zoom</div>
+          <div style={{
+            background: 'rgba(2,6,23,0.4)', borderRadius: 'var(--r-sm)',
+            border: '1px solid rgba(255,255,255,0.06)', padding: '8px 4px 2px',
+          }}>
+            <ResponsiveContainer width="100%" height={150}>
+              <AreaChart data={history}>
+                <defs>
+                  <linearGradient id="gradAgent" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%"  stopColor="#67E8F9" stopOpacity={0.25} />
+                    <stop offset="95%" stopColor="#67E8F9" stopOpacity={0.02} />
+                  </linearGradient>
+                  <linearGradient id="gradFifo" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%"  stopColor="#94a3b8" stopOpacity={0.15} />
+                    <stop offset="95%" stopColor="#94a3b8" stopOpacity={0.02} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
+                <XAxis
+                  dataKey="time"
+                  tick={{ fill: 'rgba(100,116,139,0.5)', fontSize: 9 }}
+                  axisLine={false} tickLine={false}
+                />
+                <YAxis
+                  domain={[0, 'auto']}
+                  tick={{ fill: 'rgba(100,116,139,0.5)', fontSize: 9 }}
+                  axisLine={false} tickLine={false}
+                  width={30}
+                />
+                <Tooltip content={<CustomTooltip />} />
+                <Area
+                  type="monotone" dataKey="agentThroughput" name="Agent"
+                  stroke="#67E8F9" strokeWidth={2}
+                  fill="url(#gradAgent)"
+                  dot={false} activeDot={{ r: 4, fill: '#67E8F9', stroke: 'rgba(2,6,23,0.8)', strokeWidth: 2 }}
+                />
+                <Area
+                  type="monotone" dataKey="fifoThroughput" name="FIFO"
+                  stroke="rgba(148,163,184,0.4)" strokeWidth={1.5}
+                  fill="url(#gradFifo)"
+                  dot={false} strokeDasharray="4 4"
+                />
+                <Brush
+                  dataKey="time" height={18} y={128}
+                  stroke="rgba(103,232,249,0.3)"
+                  fill="rgba(2,6,23,0.6)"
+                  tickFormatter={() => ''}
+                />
+              </AreaChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+      )}
+
+      {/* ── Empty state for time series ── */}
+      {history.length <= 1 && (
+        <div style={{
+          padding: '14px 16px',
+          border: '1px dashed rgba(255,255,255,0.08)',
+          borderRadius: 'var(--r-sm)',
+          color: 'var(--t3)',
+          fontSize: 11,
+          textAlign: 'center',
+        }}>
+          Run a simulation to see the throughput timeline with zoom
+        </div>
+      )}
     </div>
   );
 }

@@ -1,12 +1,26 @@
 import { useState } from 'react';
 import './App.css';
+import SimControls from './components/SimControls';
 import PortMap from './components/PortMap';
 import AgentTimeline from './components/AgentTimeline';
 import MetricsPanel from './components/MetricsPanel';
 import AutopsyPanel from './components/AutopsyPanel';
 
 export default function App() {
-  const [showFixed, setShowFixed] = useState(false);
+  const [showFixed, setShowFixed]       = useState(false);
+  const [agentCount, setAgentCount]     = useState(200);
+  const [scenarioCount, setScenarioCount] = useState(3);
+  const [simDone, setSimDone]           = useState(false);
+
+  const handleSimComplete = (data) => {
+    if (data?.allocated) setAgentCount(data.allocated);
+    if (data?.total)     setAgentCount(data.total);
+    setSimDone(true);
+  };
+
+  const handleInject = () => {
+    setScenarioCount(prev => prev + 1);
+  };
 
   return (
     <>
@@ -26,10 +40,16 @@ export default function App() {
             <div className="status-dot live" />
             Live System
           </div>
-          <span className="tag tag-blue">Agents: 200</span>
-          <span className="tag tag-mint">Scenarios: 3</span>
+          <span className="tag tag-blue">Agents: {agentCount}</span>
+          <span className="tag tag-mint">Scenarios: {scenarioCount}</span>
         </div>
       </nav>
+
+      {/* ── Simulation Controls ── */}
+      <SimControls
+        onSimComplete={handleSimComplete}
+        onInject={handleInject}
+      />
 
       {/* ── Two-column layout ── */}
       <div className="layout">
