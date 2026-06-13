@@ -8,11 +8,14 @@ Implements from_snapshot() for counterfactual replay (ML interface).
 from __future__ import annotations
 
 import dataclasses
+import time
 
 from .agents import container_decide
 from .auction import run_auction
+from .auction import run_auction
 from .containers import Container
 from .resources import PortResources
+from .policy_engine import engine as policy_engine
 from packages.autopsy_sdk import add_downstream_effect, DownstreamEffect
 
 
@@ -174,9 +177,18 @@ class NegotiationLoop:
                         refrigerated_slots=ref_slots,
                     )
                     if decision.get("action") == "BID" and decision.get("slot"):
+                        slot = decision["slot"]
+
+                        # --- Dynamic Policy Enforcement ---
+                        # If a malcontent agent drops the constraint, the port policy catches it!
+                        if policy_engine.get_policy("ENFORCE_COLD_CHAIN"):
+                            if c.cargo_type == "cold_chain" and slot not in ref_slots:
+                                # Policy Engine rejects the unsafe bid
+                                continue
+
                         bids.append({
                             "agent_id": c.container_id,
-                            "slot": decision["slot"],
+                            "slot": slot,
                             "bid_value": decision.get("bid_value", 0.5),
                         })
 
@@ -214,6 +226,7 @@ class NegotiationLoop:
                 })
 
                 self.t += self.ROUND_TIME_STEP
+                time.sleep(0.02)  # Tiny delay for live dashboard metrics pooling
 
             # Advance time past occupation duration so cranes free up
             if wave_allocated > 0:

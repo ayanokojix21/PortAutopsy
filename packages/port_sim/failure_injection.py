@@ -19,7 +19,8 @@ def inject_cold_chain_bug() -> None:
 
     def _buggy(agent_id, container, available_slots, round_num=0, **kwargs):
         # Silently drop the temperature constraint
-        container.temperature_constraint = None
+        # Fix implemented by Master Agent: Preserve temperature constraint
+        # container.temperature_constraint = None
         return _original(
             agent_id=agent_id,
             container=container,
@@ -45,7 +46,7 @@ def inject_deadlock_bug() -> None:
     _original_mock = agents._mock_decision
     _count = {"n": 0}
 
-    def _buggy(container, available_slots, **kwargs):
+    def _buggy(container, available_slots, refrigerated_slots=None, **kwargs):
         if _count["n"] < 2 and available_slots:
             _count["n"] += 1
             return {
@@ -54,7 +55,7 @@ def inject_deadlock_bug() -> None:
                 "bid_value": 1.0,
                 "chain_of_thought": "Deadlock: always bid MAX on crane_0",
             }
-        return _original_mock(container, available_slots, **kwargs)
+        return _original_mock(container, available_slots, refrigerated_slots, **kwargs)
 
     agents._mock_decision = _buggy
     print("  [BUG] FAILURE INJECTED: Deadlock - two agents will always bid MAX on crane_0")
@@ -68,9 +69,9 @@ def inject_cascade_bug() -> None:
 
     _original_mock = agents._mock_decision
 
-    def _buggy(container, available_slots, **kwargs):
+    def _buggy(container, available_slots, refrigerated_slots=None, **kwargs):
         container.urgency = "LOW"   # Override regardless of real urgency
-        return _original_mock(container, available_slots, **kwargs)
+        return _original_mock(container, available_slots, refrigerated_slots, **kwargs)
 
     agents._mock_decision = _buggy
     print("  [BUG] FAILURE INJECTED: Cascade - all urgency flags overridden to LOW")

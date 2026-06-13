@@ -94,10 +94,17 @@ async def run_simulation():
     from packages.port_sim.containers import spawn_containers
     from packages.port_sim.resources import PortResources
     from packages.port_sim.negotiation_loop import NegotiationLoop
+    from packages.autopsy_sdk.sdk import clear_traces
+
+    # Clear old traces so new bugs can be detected cleanly
+    clear_traces()
 
     containers = spawn_containers(200)
     loop = NegotiationLoop(containers, PortResources())
-    allocs = loop.run()
+    
+    # Run the simulation loop in a background thread so FastAPI can still serve /metrics 
+    # to the dashboard while the simulation sleeps
+    allocs = await asyncio.to_thread(loop.run)
 
     # Save state for counterfactual
     snap = loop.snapshot()
@@ -159,6 +166,27 @@ async def get_autopsy_report():
     try:
         from packages.llm_analyzer.api_helpers import get_report_json
         return get_report_json()
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@app.post("/heal")
+async def heal_codebase():
+    """Trigger the Master Agent to implement the suggested fix."""
+    try:
+        # Load the latest autopsy report
+        report_path = pathlib.Path("autopsy_report.json")
+        if not report_path.exists():
+            return {"error": "No autopsy report found to act on."}
+            
+        report = json.loads(report_path.read_text())
+        
+        # Invoke Master Agent
+        from packages.master_agent.healer import MasterAgent
+        agent = MasterAgent()
+        result = agent.implement_fix(report)
+        
+        return result
     except Exception as e:
         return {"error": str(e)}
 
