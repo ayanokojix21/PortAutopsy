@@ -107,6 +107,12 @@ async def run_simulation():
     reset_injections()
     clear_traces()
 
+    # Reset policies to default state
+    from packages.port_sim.policy_engine import engine as policy_engine
+    policy_engine.set_policy("ENFORCE_COLD_CHAIN", False)
+    policy_engine.set_policy("ENFORCE_DEADLOCK_PREVENTION", False)
+    policy_engine.set_policy("ENFORCE_URGENCY", False)
+
     # Run in a background thread so FastAPI can still serve /metrics while the
     # simulation sleeps between rounds.
     result = await asyncio.to_thread(run_sim, 200, True)
@@ -145,6 +151,12 @@ async def inject_failure(scenario: str):
 
     if scenario not in handlers:
         return {"error": f"Unknown scenario: {scenario}. Use: {list(handlers.keys())}"}
+
+    # Reset policies so the injected bug actually triggers violations (for the demo)
+    from packages.port_sim.policy_engine import engine as policy_engine
+    policy_engine.set_policy("ENFORCE_COLD_CHAIN", False)
+    policy_engine.set_policy("ENFORCE_DEADLOCK_PREVENTION", False)
+    policy_engine.set_policy("ENFORCE_URGENCY", False)
 
     # Fresh traces, then activate the bug and re-run so it shows up everywhere.
     clear_traces()
@@ -234,56 +246,13 @@ async def heal_codebase():
 
 @app.get("/metrics")
 async def get_metrics():
-    """Get simulation metrics for the dashboard.
-
-    Returns empty state until the current session has run a simulation.
-    Primary source: saved_state.json (written after every /run).
-    Fallback: traces.db (SQLite, only present if event_logger is active).
     """
-    FIFO_BASELINE = {"throughput": 100, "violations": 3, "dwell": 4.2, "debug": "Manual"}
-
-    # ── Guard: no simulation run yet this session ──────────────────────
-    if not _session["ran_simulation"]:
-        return {
-            "fifo":  {},
-            "agent": {},
-            "error": "No simulation run yet in this session.",
-        }
-
-    # ── Primary: read from saved_state.json ────────────────────────────
+    Real simulation metrics for the dashboard, read from the snapshot written
+    by the last /run or /inject. Both the agent and FIFO numbers are computed
+    from actual allocations — nothing here is hardcoded.
+    """
     state_path = pathlib.Path("saved_state.json")
-    if state_path.exists():
-        try:
-            state = json.loads(state_path.read_text())
-            allocations = state.get("allocations", {})
-            violations  = state.get("violations", [])
-            containers  = state.get("containers", [])
-
-            total = len(containers) if containers else 200
-            throughput      = round(len(allocations) / total * 100) if total else 0
-            violation_count = len(violations)
-
-            # Dwell: proxy from simulation time t (each CRANE_OCCUPY_DURATION = 0.5h)
-            sim_t   = state.get("t", 0.0)
-            alloc_n = max(len(allocations), 1)
-            avg_dwell = round(max(1.5, min(6.0, sim_t / alloc_n * 8)), 1)
-
-            return {
-                "fifo":  FIFO_BASELINE,
-                "agent": {
-                    "throughput": throughput,
-                    "violations": violation_count,
-                    "dwell":      avg_dwell,
-                    "debug":      "8 sec (autopsy)",
-                },
-            }
-        except Exception:
-            pass  # corrupt state — fall through to SQLite
-
-    # ── Fallback: traces.db (SQLite) ─────────────────────────────────────────
-    import sqlite3
-    db = pathlib.Path("traces.db")
-    if not db.exists():
+    if not state_path.exists():
         return {
             "fifo":  {},
             "agent": {},
@@ -291,34 +260,25 @@ async def get_metrics():
         }
 
     try:
-        con = sqlite3.connect(db)
-        total_agents = con.execute(
-            "SELECT COUNT(DISTINCT agent_id) FROM trace_events"
-        ).fetchone()[0]
+        state = json.loads(state_path.read_text(encoding="utf-8"))
+    except Exception as e:
+        return {"fifo": {}, "agent": {}, "error": f"Could not read state: {e}"}
 
-        violations = con.execute(
-            "SELECT COUNT(*) FROM trace_events "
-            "WHERE output_json LIKE '%\"violation\": true%' "
-            "   OR output_json LIKE '%\"violation\":true%'"
-        ).fetchone()[0]
+    agent = dict(state.get("agent_metrics", {}))
+    fifo = dict(state.get("fifo_metrics", {}))
 
-        max_round = con.execute(
-            "SELECT COALESCE(MAX(round), 0) FROM trace_events"
-        ).fetchone()[0]
-        avg_dwell  = round(max(1.5, min(6.0, (max_round * 0.5) / max(total_agents, 1) * 40)), 1)
-        throughput = round(min(total_agents / 200 * 100, 100)) if total_agents else 0
-    finally:
-        con.close()
+    if not agent or not fifo:
+        return {
+            "fifo": {},
+            "agent": {},
+            "error": "Metrics not found in state — re-run the simulation",
+        }
 
-    return {
-        "fifo":  FIFO_BASELINE,
-        "agent": {
-            "throughput": throughput,
-            "violations": violations,
-            "dwell": avg_dwell,
-            "debug": "8 sec (autopsy)",
-        },
-    }
+    # Labels for the dashboard (string fields, not numbers).
+    fifo["debug"] = "Manual"
+    agent["debug"] = "8 sec (autopsy)"
+
+    return {"fifo": fifo, "agent": agent}
 
 
 @app.get("/failure-rules")

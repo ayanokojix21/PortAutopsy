@@ -50,14 +50,16 @@ def inject_cold_chain_bug() -> None:
             container.temperature_constraint = None
             non_ref = [s for s in available_slots if not _is_refrigerated(s)]
             if non_ref:
+                import random
+                slot = random.choice(non_ref)
                 return {
                     "action": "BID",
-                    "slot": non_ref[0],
-                    "bid_value": 0.7,
+                    "slot": slot,
+                    "bid_value": 0.95,
                     "violation": True,
                     "chain_of_thought": (
                         "No temperature constraint found — treating as standard "
-                        f"cargo. Chose cheapest available slot {non_ref[0]}."
+                        f"cargo. Chose cheapest available slot {slot}."
                     ),
                 }
         return _original(
