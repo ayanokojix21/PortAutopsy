@@ -34,6 +34,14 @@ app.add_middleware(
 # ── WebSocket clients ────────────────────────────────────────
 _ws_clients: list[WebSocket] = []
 
+# ── Session state (resets on every server restart) ───────────
+# Nothing from disk is served until the current session actually runs something.
+_session = {
+    "ran_simulation": False,   # True after POST /run completes
+    "ran_autopsy":    False,   # True after POST /autopsy-report?fresh=true or GET returns real data
+    "healed":         False,   # True after POST /heal completes
+}
+
 
 @app.websocket("/ws/events")
 async def ws_events(ws: WebSocket):
@@ -112,6 +120,10 @@ async def run_simulation():
         json.dumps(snap, default=str), encoding="utf-8"
     )
 
+    # Mark this session as having run a simulation
+    _session["ran_simulation"] = True
+    _session["ran_autopsy"]    = False  # reset autopsy so it reflects the NEW run
+
     return {
         "allocated": len(allocs),
         "total": len(containers),
@@ -161,31 +173,53 @@ async def get_causal_graph():
 
 
 @app.get("/autopsy-report")
-async def get_autopsy_report():
-    """Run the full autopsy pipeline and return the report."""
+async def get_autopsy_report(fresh: bool = False):
+    """Return the autopsy report.
+
+    Rules:
+    - If no simulation has run this session → always return error (nothing to analyze).
+    - If autopsy has been run this session and fresh=false → serve cached disk report.
+    - Otherwise → run the LLM pipeline fresh.
+    """
+    report_path = pathlib.Path("autopsy_report.json")
+
+    # Guard: always block if no simulation has run this session (fresh=true won't help)
+    if not _session["ran_simulation"]:
+        return {"error": "No simulation run yet — run a simulation first, then run autopsy."}
+
+    # Serve cached report if autopsy was already run this session and caller didn't ask for fresh
+    if not fresh and _session["ran_autopsy"] and report_path.exists():
+        try:
+            return json.loads(report_path.read_text())
+        except Exception:
+            pass  # corrupt cache — fall through to fresh run
+
+    # Run the LLM pipeline
     try:
         from packages.llm_analyzer.api_helpers import get_report_json
-        return get_report_json()
+        result = get_report_json()
+        _session["ran_autopsy"] = True
+        return result
     except Exception as e:
         return {"error": str(e)}
+
 
 
 @app.post("/heal")
 async def heal_codebase():
     """Trigger the Master Agent to implement the suggested fix."""
     try:
-        # Load the latest autopsy report
         report_path = pathlib.Path("autopsy_report.json")
         if not report_path.exists():
             return {"error": "No autopsy report found to act on."}
-            
+
         report = json.loads(report_path.read_text())
-        
-        # Invoke Master Agent
+
         from packages.master_agent.healer import MasterAgent
-        agent = MasterAgent()
+        agent  = MasterAgent()
         result = agent.implement_fix(report)
-        
+
+        _session["healed"] = True
         return result
     except Exception as e:
         return {"error": str(e)}
@@ -193,51 +227,84 @@ async def heal_codebase():
 
 @app.get("/metrics")
 async def get_metrics():
-    """Get simulation metrics for the dashboard."""
-    import sqlite3
+    """Get simulation metrics for the dashboard.
 
+    Returns empty state until the current session has run a simulation.
+    Primary source: saved_state.json (written after every /run).
+    Fallback: traces.db (SQLite, only present if event_logger is active).
+    """
+    FIFO_BASELINE = {"throughput": 100, "violations": 3, "dwell": 4.2, "debug": "Manual"}
+
+    # ── Guard: no simulation run yet this session ──────────────────────
+    if not _session["ran_simulation"]:
+        return {
+            "fifo":  {},
+            "agent": {},
+            "error": "No simulation run yet in this session.",
+        }
+
+    # ── Primary: read from saved_state.json ────────────────────────────
+    state_path = pathlib.Path("saved_state.json")
+    if state_path.exists():
+        try:
+            state = json.loads(state_path.read_text())
+            allocations = state.get("allocations", {})
+            violations  = state.get("violations", [])
+            containers  = state.get("containers", [])
+
+            total = len(containers) if containers else 200
+            throughput      = round(len(allocations) / total * 100) if total else 0
+            violation_count = len(violations)
+
+            # Dwell: proxy from simulation time t (each CRANE_OCCUPY_DURATION = 0.5h)
+            sim_t   = state.get("t", 0.0)
+            alloc_n = max(len(allocations), 1)
+            avg_dwell = round(max(1.5, min(6.0, sim_t / alloc_n * 8)), 1)
+
+            return {
+                "fifo":  FIFO_BASELINE,
+                "agent": {
+                    "throughput": throughput,
+                    "violations": violation_count,
+                    "dwell":      avg_dwell,
+                    "debug":      "8 sec (autopsy)",
+                },
+            }
+        except Exception:
+            pass  # corrupt state — fall through to SQLite
+
+    # ── Fallback: traces.db (SQLite) ─────────────────────────────────────────
+    import sqlite3
     db = pathlib.Path("traces.db")
     if not db.exists():
         return {
-            "fifo": {},
+            "fifo":  {},
             "agent": {},
             "error": "No traces yet — run simulation first",
         }
 
     con = sqlite3.connect(str(db))
     try:
-        # Total unique agents that produced at least one trace
         total_agents = con.execute(
             "SELECT COUNT(DISTINCT agent_id) FROM trace_events"
         ).fetchone()[0]
 
-        # Cold-chain violations: output contains a BID on a non-refrigerated slot
-        # (the violation flag is set in the output JSON by the negotiation loop)
         violations = con.execute(
             "SELECT COUNT(*) FROM trace_events "
             "WHERE output_json LIKE '%\"violation\": true%' "
             "   OR output_json LIKE '%\"violation\":true%'"
         ).fetchone()[0]
 
-        # Average dwell: use round count as a proxy for wave-based time advancement.
-        # Each wave step advances simulation time by 0.5h and each allocation takes 2h,
-        # so avg_dwell ≈ total_rounds * 0.5 / allocated_agents (clamped to a sane range).
         max_round = con.execute(
             "SELECT COALESCE(MAX(round), 0) FROM trace_events"
         ).fetchone()[0]
-        avg_dwell = round(max(1.5, min(6.0, (max_round * 0.5) / max(total_agents, 1) * 40)), 1)
-
-        # Throughput: allocated agents out of 200 total spawned containers
-        # (customs-blocked containers never produce traces, so total_agents is ≤ 200)
+        avg_dwell  = round(max(1.5, min(6.0, (max_round * 0.5) / max(total_agents, 1) * 40)), 1)
         throughput = round(min(total_agents / 200 * 100, 100)) if total_agents else 0
-
     finally:
         con.close()
 
-    # FIFO baseline is always the documented anchor — the FIFO run does not
-    # write its own traces, so its values come from the recorded baseline run.
     return {
-        "fifo": {"throughput": 100, "violations": 3, "dwell": 4.2, "debug": "Manual"},
+        "fifo":  FIFO_BASELINE,
         "agent": {
             "throughput": throughput,
             "violations": violations,
