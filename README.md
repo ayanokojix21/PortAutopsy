@@ -38,26 +38,26 @@ The PortAutopsy ecosystem is built on four core pillars, designed for extreme co
 ```mermaid
 graph TD
     subgraph Frontend ["Interactive Dashboard (React)"]
-        UI[Live Port Map & Agent Timeline]
-        AP[Autopsy & Healing Panel]
+        UI["Live Port Map & Agent Timeline"]
+        AP["Autopsy & Healing Panel"]
     end
 
     subgraph Backend ["Real-Time Infra (FastAPI)"]
-        WS[WebSocket Bridge]
-        API[REST Endpoints]
+        WS["WebSocket Bridge"]
+        API["REST Endpoints"]
     end
 
     subgraph Simulation ["Port Simulation Engine"]
-        NL[Negotiation Loop]
-        FI[Failure Injection Module]
-        Agents[200 Autonomous Agents]
+        NL["Negotiation Loop"]
+        FI["Failure Injection Module"]
+        Agents["200 Autonomous Agents"]
     end
 
     subgraph ML ["Causal Intelligence (ML)"]
-        SDK[@trace_agent SDK]
-        DAG[Causal DAG Builder]
-        LLM[Claude Sonnet Analysis]
-        DB[(SQLite Trace DB)]
+        SDK["@trace_agent SDK"]
+        DAG["Causal DAG Builder"]
+        LLM["Claude Sonnet Analysis"]
+        DB[("SQLite Trace DB")]
     end
 
     UI <-->|WebSocket Streams| WS
