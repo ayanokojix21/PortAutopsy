@@ -9,8 +9,9 @@ import { useState, useEffect, useRef } from 'react';
  *  3. Reconnect with exponential back-off (2s → 4s → 8s → cap 16s) on disconnect.
  */
 export function useEventStream(
-  wsUrl   = 'ws://localhost:8000/ws/events',
-  restUrl = 'http://localhost:8000/traces',
+  wsUrl     = 'ws://localhost:8000/ws/events',
+  restUrl   = 'http://localhost:8000/traces',
+  refreshKey = 0,   // increment to force a re-fetch of /traces (e.g. after a new sim run)
 ) {
   const [events,    setEvents]    = useState([]);
   const [connected, setConnected] = useState(false);
@@ -20,7 +21,7 @@ export function useEventStream(
   const retryTimer = useRef(null);
   const mounted    = useRef(true);
 
-  // ── 1. Hydrate from REST on mount ──────────────────────────
+  // ── 1. Hydrate from REST on mount AND whenever refreshKey changes ──
   useEffect(() => {
     fetch(restUrl)
       .then(r => r.json())
@@ -29,7 +30,7 @@ export function useEventStream(
         setEvents(data.slice(-500));
       })
       .catch(() => {}); // backend may not be up yet — silent fail
-  }, [restUrl]);
+  }, [restUrl, refreshKey]);
 
   // ── 2. WebSocket with exponential back-off ─────────────────
   useEffect(() => {
