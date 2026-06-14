@@ -17,26 +17,22 @@ const CARGO_COLOR = {
   standard:   '#2DD4BF',
 };
 
-export default function AgentTimeline({ apiUrl = 'http://localhost:8000/traces' }) {
+export default function AgentTimeline({ apiUrl = 'http://localhost:8000/traces', refreshKey = 0 }) {
   const [restTraces, setRestTraces] = useState([]);
   const [selected, setSelected]     = useState(null);
   const [showAll,  setShowAll]      = useState(false);
   const mountedRef                  = useRef(true);
-  const { events: wsEvents }        = useEventStream();
+  const { events: wsEvents }        = useEventStream('ws://localhost:8000/ws/events', apiUrl, refreshKey);
 
-  // ── REST hydration — re-polls every 10 s so new simulation runs auto-refresh ──
+  // ── REST hydration — re-runs whenever refreshKey changes (new simulation) ──
   useEffect(() => {
     mountedRef.current = true;
-    const load = () => {
-      fetch(apiUrl)
-        .then(r => r.json())
-        .then(d => { if (mountedRef.current && Array.isArray(d) && d.length) setRestTraces(d); })
-        .catch(() => {});
-    };
-    load();                               // immediate first fetch
-    const id = setInterval(load, 10000);  // re-poll every 10s
-    return () => { mountedRef.current = false; clearInterval(id); };
-  }, [apiUrl]);
+    fetch(apiUrl)
+      .then(r => r.json())
+      .then(d => { if (mountedRef.current && Array.isArray(d) && d.length) setRestTraces(d); })
+      .catch(() => {});
+    return () => { mountedRef.current = false; };
+  }, [apiUrl, refreshKey]);
 
   const allTraces = (() => {
     const merged = [...restTraces, ...wsEvents];

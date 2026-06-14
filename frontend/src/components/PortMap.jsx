@@ -44,8 +44,8 @@ function parseCraneIndex(slot) {
   return m ? parseInt(m[1], 10) : NaN;
 }
 
-export default function PortMap() {
-  const { events, connected } = useEventStream();
+export default function PortMap({ refreshKey = 0 }) {
+  const { events, connected } = useEventStream('ws://localhost:8000/ws/events', 'http://localhost:8000/traces', refreshKey);
 
   // ── Build allocation map ───────────────────────────────────────────────────
   // Key: craneIndex (number), Value: { agentId, cargoType }
