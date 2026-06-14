@@ -1,0 +1,207 @@
+/* Architecture Page Professional Styles */
+
+.arch-page {
+  background-color: #030712;
+  color: #e5e7eb;
+  min-height: 100vh;
+  font-family: 'Inter', sans-serif;
+  line-height: 1.7;
+}
+
+.arch-nav {
+  padding: 1.5rem 4rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  background-color: rgba(3, 7, 18, 0.8);
+  backdrop-filter: blur(10px);
+  position: sticky;
+  top: 0;
+  z-index: 100;
+}
+
+.nav-logo.cursor-pointer {
+  cursor: pointer;
+  transition: opacity 0.2s;
+}
+
+.nav-logo.cursor-pointer:hover {
+  opacity: 0.8;
+}
+
+.nav-btn-text {
+  background: none;
+  border: none;
+  color: #9ca3af;
+  font-size: 1rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: color 0.3s;
+}
+
+.nav-btn-text:hover {
+  color: #fff;
+}
+
+/* Header */
+.arch-header {
+  padding: 6rem 2rem 4rem;
+  text-align: center;
+  background: radial-gradient(circle at 50% 0%, rgba(37, 99, 235, 0.15) 0%, rgba(3, 7, 18, 0) 60%);
+}
+
+.arch-header-content {
+  max-width: 800px;
+  margin: 0 auto;
+}
+
+.arch-title {
+  font-size: 4rem;
+  font-weight: 800;
+  letter-spacing: -1.5px;
+  margin-bottom: 1.5rem;
+  line-height: 1.1;
+}
+
+.arch-subtitle {
+  font-size: 1.25rem;
+  color: #9ca3af;
+}
+
+/* Main Content */
+.arch-main {
+  padding: 2rem 2rem 6rem;
+}
+
+.arch-container {
+  max-width: 900px;
+  margin: 0 auto;
+}
+
+.arch-section {
+  margin-bottom: 4rem;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 16px;
+  padding: 3rem;
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+
+.arch-section:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+.section-heading {
+  font-size: 2rem;
+  font-weight: 700;
+  margin-bottom: 1.5rem;
+  letter-spacing: -0.5px;
+}
+
+.section-body p {
+  margin-bottom: 1.25rem;
+  font-size: 1.1rem;
+  color: #d1d5db;
+}
+
+.section-body strong {
+  color: #fff;
+  font-weight: 600;
+}
+
+.section-body code {
+  background: rgba(255, 255, 255, 0.1);
+  padding: 0.2rem 0.4rem;
+  border-radius: 4px;
+  font-family: monospace;
+  font-size: 0.9em;
+  color: #93c5fd;
+}
+
+/* Lists */
+.arch-list {
+  list-style: none;
+  padding-left: 0;
+  margin-bottom: 1.5rem;
+}
+
+.arch-list li {
+  position: relative;
+  padding-left: 1.5rem;
+  margin-bottom: 0.75rem;
+  font-size: 1.1rem;
+  color: #d1d5db;
+}
+
+.arch-list li::before {
+  content: '→';
+  position: absolute;
+  left: 0;
+  color: #3b82f6;
+  font-weight: bold;
+}
+
+.arch-list.numbered {
+  counter-reset: arch-counter;
+}
+
+.arch-list.numbered li {
+  padding-left: 2rem;
+}
+
+.arch-list.numbered li::before {
+  counter-increment: arch-counter;
+  content: counter(arch-counter) ".";
+  color: #10b981;
+}
+
+/* Split Feature */
+.split-feature {
+  display: flex;
+  gap: 3rem;
+  align-items: center;
+}
+
+.feature-text {
+  flex: 3;
+}
+
+.feature-visual {
+  flex: 2;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.visual-img {
+  width: 100%;
+  border-radius: 12px;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.4);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+@media (max-width: 768px) {
+  .split-feature {
+    flex-direction: column;
+  }
+}
+
+/* CTA */
+.arch-cta {
+  text-align: center;
+  margin-top: 6rem;
+  padding: 4rem 2rem;
+  background: linear-gradient(135deg, rgba(37, 99, 235, 0.1) 0%, rgba(16, 185, 129, 0.1) 100%);
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.arch-cta-title {
+  font-size: 2.5rem;
+  font-weight: 800;
+  margin-bottom: 2rem;
+  color: #fff;
+}

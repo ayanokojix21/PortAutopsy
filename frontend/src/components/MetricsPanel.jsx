@@ -134,7 +134,7 @@ export default function MetricsPanel({ showFixed = false }) {
       </div>
 
       {/* ── Delta KPI strip ── */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 8, marginBottom: 14 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 8, marginBottom: 14 }}>
         <div className="kpi-card" style={{ textAlign: 'center' }}>
           <div style={{ fontSize: 17, fontWeight: 600, color: 'var(--t2)' }}>
             {hasData ? `${fifo.throughput}%` : '—'}
@@ -145,7 +145,7 @@ export default function MetricsPanel({ showFixed = false }) {
           }}>FIFO Baseline</div>
         </div>
         <div className="kpi-card" style={{ textAlign: 'center', borderColor: 'rgba(103,232,249,0.2)' }}>
-          <div style={{ fontSize: 17, fontWeight: 600, color: '#67E8F9' }}>
+          <div style={{ fontSize: 17, fontWeight: 600, color: agent.violations > 0 ? 'var(--t3)' : '#67E8F9' }}>
             {hasData ? violationsPrevented : '—'}
           </div>
           <div style={{
@@ -161,6 +161,25 @@ export default function MetricsPanel({ showFixed = false }) {
             fontSize: 10, color: 'var(--t2)', marginTop: 3,
             textTransform: 'uppercase', letterSpacing: '0.08em',
           }}>Violations</div>
+        </div>
+        <div className="kpi-card" style={{ 
+          textAlign: 'center', 
+          borderColor: agent.violations > 0 ? 'rgba(225, 29, 72, 0.5)' : 'rgba(255,255,255,0.06)',
+          background: agent.violations > 0 ? 'rgba(225, 29, 72, 0.05)' : 'transparent',
+          animation: agent.violations > 0 ? 'badge-pulse 1.5s ease-in-out infinite' : 'none'
+        }}>
+          <div style={{ 
+            fontSize: 17, 
+            fontWeight: 700, 
+            color: agent.violations > 0 ? '#E11D48' : 'var(--t3)',
+            textShadow: agent.violations > 0 ? '0 0 10px rgba(225, 29, 72, 0.5)' : 'none'
+          }}>
+            {hasData ? `$${(agent.violations * 0.15).toFixed(2)}M` : '—'}
+          </div>
+          <div style={{
+            fontSize: 10, color: agent.violations > 0 ? '#FDA4AF' : 'var(--t3)', marginTop: 3,
+            textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: agent.violations > 0 ? 600 : 400
+          }}>Est. Penalty</div>
         </div>
       </div>
 

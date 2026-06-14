@@ -5,8 +5,11 @@ import PortMap from './components/PortMap';
 import AgentTimeline from './components/AgentTimeline';
 import MetricsPanel from './components/MetricsPanel';
 import AutopsyPanel from './components/AutopsyPanel';
+import LandingPage from './components/LandingPage';
+import ArchitecturePage from './components/ArchitecturePage';
 
 export default function App() {
+  const [currentPage,    setCurrentPage]    = useState('landing');
   const [showFixed,      setShowFixed]      = useState(false);
   const [agentCount,     setAgentCount]     = useState(200);
   const [scenarioCount,  setScenarioCount]  = useState(3);
@@ -42,6 +45,14 @@ export default function App() {
   };
 
   const handleInject = () => setScenarioCount(prev => prev + 1);
+
+  if (currentPage === 'landing') {
+    return <LandingPage onNavigate={setCurrentPage} />;
+  }
+
+  if (currentPage === 'architecture') {
+    return <ArchitecturePage onNavigate={setCurrentPage} />;
+  }
 
   return (
     <>
