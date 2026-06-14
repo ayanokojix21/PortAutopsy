@@ -174,13 +174,17 @@ body {
   min-height: 0;
 }
 
-/* Right column: Metrics compact top, Autopsy gets all remaining space */
+/* Right column: single scrollable column */
 .col-right {
-  display: grid;
-  grid-template-rows: auto 1fr;
+  display: flex;
+  flex-direction: column;
   gap: 12px;
-  overflow: hidden;
+  overflow-y: auto;
+  overflow-x: hidden;
   min-height: 0;
+  padding-right: 2px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255,255,255,0.10) transparent;
 }
 
 /* Port map card */
@@ -210,12 +214,12 @@ body {
 /* Right panel cards */
 .metrics-card {
   padding: 16px 20px;
-  overflow: hidden;
+  overflow-y: auto;
+  flex-shrink: 0;
 }
 .autopsy-card {
   padding: 18px 20px;
-  overflow-y: auto;
-  min-height: 0;
+  flex-shrink: 0;
 }
 .autopsy-card::-webkit-scrollbar { width: 3px; }
 
