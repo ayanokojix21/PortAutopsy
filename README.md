@@ -138,7 +138,7 @@ The frontend will start on `http://localhost:5173` (or the port specified by Vit
 ---
 
 ## 👥 The Team
-- **Nischal** - Intelligence (ML) | *Causal DAG & Autopsy Agent*
+- **Nishchal** - Intelligence (ML) | *Causal DAG & Autopsy Agent*
 - **Vaidik** - Backend Simulation | *Agent Negotiation Engine*
 - **Smarak** - Real-Time Infra | *FastAPI & WebSockets*
 - **Vinayak** - Interactive Dashboard | *React Visualizations*
