@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell,
-  AreaChart, Area, Brush, CartesianGrid, Legend,
+  AreaChart, Area, Brush, CartesianGrid,
 } from 'recharts';
 import { useMetricsHistory } from '../hooks/useMetricsHistory';
 
@@ -35,7 +35,7 @@ function CustomTooltip({ active, payload, label }) {
   );
 }
 
-function DwellTooltip({ active, payload, label }) {
+function ViolationsTooltip({ active, payload, label }) {
   if (!active || !payload?.length) return null;
   return (
     <div style={{
@@ -51,7 +51,7 @@ function DwellTooltip({ active, payload, label }) {
         <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 3 }}>
           <span style={{ width: 8, height: 8, borderRadius: '50%', background: p.color, flexShrink: 0 }} />
           <span style={{ color: 'var(--t2)' }}>{p.name}:</span>
-          <span style={{ color: 'var(--t1)', fontWeight: 600, fontFamily: 'var(--mono)' }}>{p.value}h</span>
+          <span style={{ color: 'var(--t1)', fontWeight: 600, fontFamily: 'var(--mono)' }}>{p.value} violations</span>
         </div>
       ))}
     </div>
@@ -62,17 +62,24 @@ function DwellTooltip({ active, payload, label }) {
 export default function MetricsPanel({ showFixed = false }) {
   const { history, latest, status } = useMetricsHistory();
 
-  // Merge live data with fallbacks
-  const fifo  = { ...FALLBACK.fifo,  ...(latest?.fifo  || {}) };
-  const agent = { ...FALLBACK.agent, ...(latest?.agent || {}) };
+  // Only merge fallback once we have actual live data.
+  // When latest === null (no simulation run yet), show clean zeros — not fake numbers.
+  const hasData = latest !== null;
+  const fifo  = hasData ? { ...FALLBACK.fifo,  ...(latest?.fifo  || {}) } : { throughput: 0, violations: 0, dwell: 0 };
+  const agent = hasData ? { ...FALLBACK.agent, ...(latest?.agent || {}) } : { throughput: 0, violations: 0, dwell: 0 };
 
   const agentGain = agent.throughput - fifo.throughput;
 
-  // ── Bar chart data — comparison snapshot ──
-  const barData = useMemo(() => [
-    { name: 'Throughput',  FIFO: fifo.throughput,  Agent: agent.throughput },
-    { name: 'Violations',  FIFO: fifo.violations,  Agent: agent.violations },
-  ], [fifo.throughput, fifo.violations, agent.throughput, agent.violations]);
+  // ── Separate bar data for throughput and violations ──
+  const throughputBarData = useMemo(() => [
+    { name: 'FIFO',  value: fifo.throughput,  fill: 'rgba(148,163,184,0.3)',  stroke: 'rgba(148,163,184,0.5)' },
+    { name: 'Agent', value: agent.throughput, fill: 'rgba(103,232,249,0.25)', stroke: 'rgba(103,232,249,0.6)' },
+  ], [fifo.throughput, agent.throughput]);
+
+  const violationsBarData = useMemo(() => [
+    { name: 'FIFO',  value: fifo.violations,  fill: 'rgba(148,163,184,0.3)',  stroke: 'rgba(148,163,184,0.5)' },
+    { name: 'Agent', value: agent.violations, fill: 'rgba(251,113,133,0.3)',  stroke: 'rgba(251,113,133,0.65)' },
+  ], [fifo.violations, agent.violations]);
 
   return (
     <div>
@@ -105,7 +112,17 @@ export default function MetricsPanel({ showFixed = false }) {
               border: '1px solid rgba(255,255,255,0.08)',
               borderRadius: 20, padding: '2px 8px',
             }}>
-              Offline — using defaults
+              Awaiting simulation
+            </span>
+          )}
+          {!hasData && status !== 'error' && (
+            <span style={{
+              fontSize: 10, color: 'var(--t3)',
+              background: 'rgba(255,255,255,0.04)',
+              border: '1px solid rgba(255,255,255,0.08)',
+              borderRadius: 20, padding: '2px 8px',
+            }}>
+              Run simulation to see metrics
             </span>
           )}
           {showFixed && (
@@ -118,7 +135,7 @@ export default function MetricsPanel({ showFixed = false }) {
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 8, marginBottom: 14 }}>
         <div className="kpi-card" style={{ textAlign: 'center' }}>
           <div style={{ fontSize: 17, fontWeight: 600, color: 'var(--t2)' }}>
-            {fifo.throughput}%
+            {hasData ? `${fifo.throughput}%` : '—'}
           </div>
           <div style={{
             fontSize: 10, color: 'var(--t3)', marginTop: 3,
@@ -127,7 +144,7 @@ export default function MetricsPanel({ showFixed = false }) {
         </div>
         <div className="kpi-card" style={{ textAlign: 'center', borderColor: 'rgba(103,232,249,0.2)' }}>
           <div style={{ fontSize: 17, fontWeight: 600, color: '#67E8F9' }}>
-            {agentGain >= 0 ? '+' : ''}{agentGain}%
+            {hasData ? `${agentGain >= 0 ? '+' : ''}${agentGain}%` : '—'}
           </div>
           <div style={{
             fontSize: 10, color: 'var(--t2)', marginTop: 3,
@@ -145,40 +162,72 @@ export default function MetricsPanel({ showFixed = false }) {
         </div>
       </div>
 
-      {/* ── Bar Chart: FIFO vs Agent ── */}
-      <div style={{ marginBottom: 14 }}>
-        <div className="info-label">FIFO vs Agent Comparison</div>
-        <div style={{
-          background: 'rgba(2,6,23,0.4)', borderRadius: 'var(--r-sm)',
-          border: '1px solid rgba(255,255,255,0.06)', padding: '8px 4px',
-        }}>
-          <ResponsiveContainer width="100%" height={120}>
-            <BarChart data={barData} barGap={6} barSize={28}>
-              <XAxis
-                dataKey="name"
-                tick={{ fill: 'rgba(100,116,139,0.6)', fontSize: 10 }}
-                axisLine={false} tickLine={false}
-              />
-              <YAxis hide />
-              <Tooltip content={<CustomTooltip />} cursor={{ fill: 'rgba(255,255,255,0.03)' }} />
-              <Bar dataKey="FIFO" radius={[4, 4, 0, 0]} name="FIFO">
-                {barData.map((_, i) => (
-                  <Cell key={i} fill="rgba(148,163,184,0.25)" stroke="rgba(148,163,184,0.4)" strokeWidth={1} />
-                ))}
-              </Bar>
-              <Bar dataKey="Agent" radius={[4, 4, 0, 0]} name="Agent">
-                {barData.map((entry, i) => (
-                  <Cell
-                    key={i}
-                    fill={entry.name === 'Violations' ? 'rgba(251,113,133,0.25)' : 'rgba(103,232,249,0.2)'}
-                    stroke={entry.name === 'Violations' ? 'rgba(251,113,133,0.5)' : 'rgba(103,232,249,0.5)'}
-                    strokeWidth={1}
-                  />
-                ))}
-              </Bar>
-            </BarChart>
-          </ResponsiveContainer>
+      {/* ── Bar Charts: Throughput + Violations side by side ── */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 14 }}>
+
+        {/* Throughput */}
+        <div>
+          <div className="info-label">Throughput %</div>
+          <div style={{
+            background: 'rgba(2,6,23,0.4)', borderRadius: 'var(--r-sm)',
+            border: '1px solid rgba(255,255,255,0.06)', padding: '8px 4px 4px',
+          }}>
+            <ResponsiveContainer width="100%" height={100}>
+              <BarChart data={throughputBarData} barGap={4} barSize={32}>
+                <XAxis
+                  dataKey="name"
+                  tick={{ fill: 'rgba(100,116,139,0.6)', fontSize: 10 }}
+                  axisLine={false} tickLine={false}
+                />
+                <YAxis hide domain={[0, 110]} />
+                <Tooltip content={<CustomTooltip />} cursor={{ fill: 'rgba(255,255,255,0.03)' }} />
+                <Bar dataKey="value" radius={[4, 4, 0, 0]} name="Throughput">
+                  {throughputBarData.map((entry, i) => (
+                    <Cell key={i} fill={entry.fill} stroke={entry.stroke} strokeWidth={1} />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
         </div>
+
+        {/* Violations — own scale so even small counts are visible */}
+        <div>
+          <div className="info-label" style={{ color: agent.violations > 0 ? 'rgba(251,113,133,0.7)' : 'var(--t3)' }}>
+            Violations (count)
+          </div>
+          <div style={{
+            background: 'rgba(2,6,23,0.4)', borderRadius: 'var(--r-sm)',
+            border: `1px solid ${agent.violations > 0 ? 'rgba(251,113,133,0.2)' : 'rgba(255,255,255,0.06)'}`,
+            padding: '8px 4px 4px',
+          }}>
+            <ResponsiveContainer width="100%" height={100}>
+              <BarChart data={violationsBarData} barGap={4} barSize={32}>
+                <XAxis
+                  dataKey="name"
+                  tick={{ fill: 'rgba(100,116,139,0.6)', fontSize: 10 }}
+                  axisLine={false} tickLine={false}
+                />
+                {/* Use auto domain so 0 violations still renders a visible zero-height bar */}
+                <YAxis
+                  hide={false}
+                  domain={[0, dataMax => Math.max(dataMax + 1, 5)]}
+                  tick={{ fill: 'rgba(100,116,139,0.5)', fontSize: 9 }}
+                  axisLine={false} tickLine={false}
+                  width={18}
+                  allowDecimals={false}
+                />
+                <Tooltip content={<ViolationsTooltip />} cursor={{ fill: 'rgba(255,255,255,0.03)' }} />
+                <Bar dataKey="value" radius={[4, 4, 0, 0]} name="Violations" minPointSize={2}>
+                  {violationsBarData.map((entry, i) => (
+                    <Cell key={i} fill={entry.fill} stroke={entry.stroke} strokeWidth={1} />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+
       </div>
 
       {/* ── Time Series: Throughput over time with Brush zoom ── */}
