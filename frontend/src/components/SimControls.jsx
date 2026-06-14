@@ -6,25 +6,35 @@ const SCENARIOS = [
   { id: 'cascade',    label: '💥 Cascade',     desc: 'Trigger cascading failure across berths' },
 ];
 
-export default function SimControls({ onSimComplete, onInject }) {
-  const [simStatus,   setSimStatus]   = useState('idle');   // idle | running | done | error
-  const [simResult,   setSimResult]   = useState(null);
-  const [injecting,   setInjecting]   = useState(null);     // scenario id or null
-  const [injected,    setInjected]    = useState([]);        // list of injected scenario ids
+export default function SimControls({ onSimComplete, onInject, externalStatus, externalResult, onRunSimulation }) {
+  const [_simStatus, _setSimStatus] = useState('idle');
+  const [_simResult, _setSimResult] = useState(null);
+  const [injecting,  setInjecting]  = useState(null);
+  const [injected,   setInjected]   = useState([]);
   const [dropdownOpen, setDropdownOpen] = useState(false);
 
+  // Use external state if provided (App.jsx drives the run), else internal
+  const simStatus = externalStatus ?? _simStatus;
+  const simResult = externalResult ?? _simResult;
+
   const runSimulation = async () => {
-    setSimStatus('running');
-    setSimResult(null);
+    if (onRunSimulation) {
+      // Delegate to parent — parent manages state
+      await onRunSimulation();
+      return;
+    }
+    // Standalone mode — manage own state
+    _setSimStatus('running');
+    _setSimResult(null);
     try {
-      const res = await fetch('http://localhost:8000/run', { method: 'POST' });
+      const res  = await fetch('http://localhost:8000/run', { method: 'POST' });
       const data = await res.json();
-      setSimResult(data);
-      setSimStatus('done');
+      _setSimResult(data);
+      _setSimStatus('done');
       onSimComplete?.(data);
     } catch (e) {
-      setSimStatus('error');
-      setSimResult({ error: e.message });
+      _setSimStatus('error');
+      _setSimResult({ error: e.message });
     }
   };
 
