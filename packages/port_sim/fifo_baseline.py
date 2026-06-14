@@ -14,7 +14,7 @@ from .resources import PortResources
 _CRANE_OCCUPY_DURATION = 0.5
 
 
-def run_fifo(containers, resources: PortResources | None = None) -> dict[str, str]:
+def run_fifo(containers, resources: PortResources | None = None, stats: dict | None = None) -> dict[str, str]:
     """
     Allocate containers in FIFO order (by dwell_time_target).
     No intelligence — first come, first served.
@@ -34,6 +34,7 @@ def run_fifo(containers, resources: PortResources | None = None) -> dict[str, st
     eligible = [c for c in sorted_containers if c.customs_cleared]
 
     max_waves = 20
+    waves_used = 0
     for _ in range(max_waves):
         remaining = [c for c in eligible if c.container_id not in allocations]
         if not remaining:
@@ -52,5 +53,9 @@ def run_fifo(containers, resources: PortResources | None = None) -> dict[str, st
         # Advance time so occupied cranes free up
         if wave_allocated:
             t += _CRANE_OCCUPY_DURATION
+            waves_used += 1
+
+    if stats is not None:
+        stats["waves"] = waves_used
 
     return allocations

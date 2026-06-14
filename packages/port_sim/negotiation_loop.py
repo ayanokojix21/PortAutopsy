@@ -10,8 +10,7 @@ from __future__ import annotations
 import dataclasses
 import time
 
-from .agents import container_decide
-from .auction import run_auction
+from . import agents
 from .auction import run_auction
 from .containers import Container
 from .resources import PortResources
@@ -169,7 +168,7 @@ class NegotiationLoop:
                     if not c.customs_cleared:
                         continue
 
-                    decision = container_decide(
+                    decision = agents.container_decide(
                         agent_id=c.container_id,
                         container=c,
                         available_slots=available,
@@ -178,18 +177,31 @@ class NegotiationLoop:
                     )
                     if decision.get("action") == "BID" and decision.get("slot"):
                         slot = decision["slot"]
+                        bid_value = decision.get("bid_value", 0.5)
 
-                        # --- Dynamic Policy Enforcement ---
-                        # If a malcontent agent drops the constraint, the port policy catches it!
+                        # --- Dynamic Policy Enforcement (set by the Master Agent) ---
+                        # Each healed policy neutralises one injected failure mode.
+
+                        # Cold chain: reject unsafe bids on non-refrigerated slots.
                         if policy_engine.get_policy("ENFORCE_COLD_CHAIN"):
                             if c.cargo_type == "cold_chain" and slot not in ref_slots:
-                                # Policy Engine rejects the unsafe bid
-                                continue
+                                continue  # Policy Engine rejects the unsafe bid
+
+                        # Urgency: restore a priority-weighted bid so misread
+                        # HIGH/CRITICAL cargo is no longer starved by under-bidding.
+                        if policy_engine.get_policy("ENFORCE_URGENCY"):
+                            if c.urgency in ("HIGH", "CRITICAL"):
+                                bid_value = max(bid_value, 0.95)
+
+                        # Deadlock: cap pathological MAX bids so ties resolve.
+                        if policy_engine.get_policy("ENFORCE_DEADLOCK_PREVENTION"):
+                            if bid_value >= 1.0:
+                                bid_value = 0.9
 
                         bids.append({
                             "agent_id": c.container_id,
                             "slot": slot,
-                            "bid_value": decision.get("bid_value", 0.5),
+                            "bid_value": bid_value,
                         })
 
                 if not bids:
@@ -250,7 +262,7 @@ class NegotiationLoop:
             return {"error": f"Agent {agent_id} not found"}
 
         available = self.resources.available_slots(self.t)
-        return container_decide(
+        return agents.container_decide(
             agent_id=agent_id,
             container=container,
             available_slots=available,

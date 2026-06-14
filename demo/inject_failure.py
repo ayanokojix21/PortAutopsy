@@ -44,21 +44,19 @@ def main():
         print(f"  Available: cold_chain, deadlock, cascade")
         sys.exit(1)
 
-    # -- Re-run simulation with failure active --
+    # -- Re-run simulation with failure active (saves real metrics + snapshot) --
     print(f"\n  Re-running simulation with {scenario} bug active...")
-    from packages.port_sim.containers import spawn_containers
-    from packages.port_sim.resources import PortResources
-    from packages.port_sim.negotiation_loop import NegotiationLoop
+    from packages.port_sim.runner import run_simulation
     from packages.autopsy_sdk import get_trace_count
 
-    containers = spawn_containers(200)
-    loop = NegotiationLoop(containers, PortResources())
-    allocs = loop.run()
+    result = run_simulation(200, save=True)
+    am, fm = result["agent_metrics"], result["fifo_metrics"]
 
     print(f"\n  [OK] Post-injection run complete")
-    print(f"     Allocated: {len(allocs)}/200")
+    print(f"     Allocated: {result['allocated']}/{result['total']}")
+    print(f"     Agent violations: {am['violations']}  |  FIFO violations: {fm['violations']}")
     print(f"     Traces: {get_trace_count()} events recorded")
-    print(f"     Files: traces.jsonl, traces.db")
+    print(f"     Files: traces.jsonl, traces.db, saved_state.json")
     print(f"\n  Next: python demo/run_autopsy.py")
     print("=" * 56)
 

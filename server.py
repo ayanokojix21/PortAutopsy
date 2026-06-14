@@ -98,47 +98,44 @@ async def health():
 
 @app.post("/run")
 async def run_simulation():
-    """Run the full 200-agent simulation."""
-    from packages.port_sim.containers import spawn_containers
-    from packages.port_sim.resources import PortResources
-    from packages.port_sim.negotiation_loop import NegotiationLoop
+    """Run a clean 200-agent simulation + FIFO baseline with real metrics."""
     from packages.autopsy_sdk.sdk import clear_traces
+    from packages.port_sim.failure_injection import reset_injections
+    from packages.port_sim.runner import run_simulation as run_sim
 
-    # Clear old traces so new bugs can be detected cleanly
+    # Remove any previously injected bug + clear old traces so this run is clean.
+    reset_injections()
     clear_traces()
 
-    containers = spawn_containers(200)
-    loop = NegotiationLoop(containers, PortResources())
-    
-    # Run the simulation loop in a background thread so FastAPI can still serve /metrics 
-    # to the dashboard while the simulation sleeps
-    allocs = await asyncio.to_thread(loop.run)
-
-    # Save state for counterfactual
-    snap = loop.snapshot()
-    pathlib.Path("saved_state.json").write_text(
-        json.dumps(snap, default=str), encoding="utf-8"
-    )
+    # Run in a background thread so FastAPI can still serve /metrics while the
+    # simulation sleeps between rounds.
+    result = await asyncio.to_thread(run_sim, 200, True)
 
     # Mark this session as having run a simulation
     _session["ran_simulation"] = True
     _session["ran_autopsy"]    = False  # reset autopsy so it reflects the NEW run
 
     return {
-        "allocated": len(allocs),
-        "total": len(containers),
+        "allocated": result["allocated"],
+        "total": result["total"],
+        "eligible": result["eligible"],
+        "agent_metrics": result["agent_metrics"],
+        "fifo_metrics": result["fifo_metrics"],
         "state_saved": True,
     }
 
 
 @app.post("/inject/{scenario}")
 async def inject_failure(scenario: str):
-    """Inject a failure scenario."""
+    """Inject a failure scenario AND re-run the simulation so the dashboard,
+    traces, and autopsy all reflect the broken behaviour."""
+    from packages.autopsy_sdk.sdk import clear_traces
     from packages.port_sim.failure_injection import (
         inject_cold_chain_bug,
         inject_deadlock_bug,
         inject_cascade_bug,
     )
+    from packages.port_sim.runner import run_simulation as run_sim
 
     handlers = {
         "cold_chain": inject_cold_chain_bug,
@@ -149,8 +146,18 @@ async def inject_failure(scenario: str):
     if scenario not in handlers:
         return {"error": f"Unknown scenario: {scenario}. Use: {list(handlers.keys())}"}
 
+    # Fresh traces, then activate the bug and re-run so it shows up everywhere.
+    clear_traces()
     handlers[scenario]()
-    return {"injected": scenario}
+    result = await asyncio.to_thread(run_sim, 200, True)
+
+    return {
+        "injected": scenario,
+        "allocated": result["allocated"],
+        "total": result["total"],
+        "agent_metrics": result["agent_metrics"],
+        "fifo_metrics": result["fifo_metrics"],
+    }
 
 
 @app.get("/traces")
@@ -280,11 +287,11 @@ async def get_metrics():
         return {
             "fifo":  {},
             "agent": {},
-            "error": "No traces yet — run simulation first",
+            "error": "No simulation yet — run a simulation first",
         }
 
-    con = sqlite3.connect(str(db))
     try:
+        con = sqlite3.connect(db)
         total_agents = con.execute(
             "SELECT COUNT(DISTINCT agent_id) FROM trace_events"
         ).fetchone()[0]

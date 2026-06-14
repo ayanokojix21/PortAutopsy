@@ -171,3 +171,8 @@ def container_decide(
         return _llm_decision(agent_id, container, available_slots, round_num)
 
     return _mock_decision(container, available_slots, refrigerated_slots)
+
+
+# Keep a pristine, undecorated reference so failure_injection.reset_injections()
+# can restore clean behaviour after a scenario has been injected.
+_pristine_container_decide = container_decide.__wrapped__

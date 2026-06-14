@@ -5,10 +5,12 @@ import {
 } from 'recharts';
 import { useMetricsHistory } from '../hooks/useMetricsHistory';
 
-// ── Fallback only used when backend is fully unreachable ──────────
+// ── Neutral placeholders shown only before the first /metrics response ──
+// Real values always come from the backend; these zeros ensure no fabricated
+// numbers are ever displayed while offline.
 const FALLBACK = {
-  fifo:  { throughput: 100, violations: 3, dwell: 4.2, debug: 'Manual' },
-  agent: { throughput: 123, violations: 0, dwell: 2.8, debug: '8 sec (autopsy)' },
+  fifo:  { throughput: 0, violations: 0, dwell: 0, debug: 'Manual' },
+  agent: { throughput: 0, violations: 0, dwell: 0, debug: 'autopsy' },
 };
 
 // ── Custom tooltip ────────────────────────────────────────────────
@@ -68,7 +70,7 @@ export default function MetricsPanel({ showFixed = false }) {
   const fifo  = hasData ? { ...FALLBACK.fifo,  ...(latest?.fifo  || {}) } : { throughput: 0, violations: 0, dwell: 0 };
   const agent = hasData ? { ...FALLBACK.agent, ...(latest?.agent || {}) } : { throughput: 0, violations: 0, dwell: 0 };
 
-  const agentGain = agent.throughput - fifo.throughput;
+  const violationsPrevented = Math.max(0, (fifo.violations ?? 0) - (agent.violations ?? 0));
 
   // ── Separate bar data for throughput and violations ──
   const throughputBarData = useMemo(() => [
@@ -144,12 +146,12 @@ export default function MetricsPanel({ showFixed = false }) {
         </div>
         <div className="kpi-card" style={{ textAlign: 'center', borderColor: 'rgba(103,232,249,0.2)' }}>
           <div style={{ fontSize: 17, fontWeight: 600, color: '#67E8F9' }}>
-            {hasData ? `${agentGain >= 0 ? '+' : ''}${agentGain}%` : '—'}
+            {hasData ? violationsPrevented : '—'}
           </div>
           <div style={{
             fontSize: 10, color: 'var(--t2)', marginTop: 3,
             textTransform: 'uppercase', letterSpacing: '0.08em',
-          }}>Agent Lift</div>
+          }}>Breaches Prevented</div>
         </div>
         <div className="kpi-card" style={{ textAlign: 'center', borderColor: 'rgba(251,113,133,0.2)' }}>
           <div style={{ fontSize: 17, fontWeight: 600, color: agent.violations > 0 ? '#FB7185' : '#2DD4BF' }}>

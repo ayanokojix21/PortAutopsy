@@ -62,7 +62,16 @@ def run_autopsy(
 
     # ── Step 3: Run counterfactual ───────────────────────────
     print("  [3/5] Running counterfactual replay...")
-    override = input_override or {"temperature_constraint": 4.0}
+    # Choose a fix-shaped override that matches the detected failure type.
+    _override_by_rule = {
+        "cold_chain_violation": {"temperature_constraint": 4.0},
+        "constraint_null": {"temperature_constraint": 4.0},
+        "urgency_misread": {"urgency": "CRITICAL"},
+        "deadlock": {"bid_value": 0.9},
+    }
+    override = input_override or _override_by_rule.get(
+        root.rule_name, {"temperature_constraint": 4.0}
+    )
     cf = run_counterfactual(root.trace_id, override, frozen_state or {})
     changed_str = "[YES] outcome changed" if cf["changed"] else "[!] no change"
     print(f"        -> {changed_str}")

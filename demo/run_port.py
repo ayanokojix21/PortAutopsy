@@ -18,9 +18,6 @@ from dotenv import load_dotenv
 load_dotenv()
 
 from packages.port_sim.containers import spawn_containers, Container
-from packages.port_sim.resources import PortResources
-from packages.port_sim.negotiation_loop import NegotiationLoop
-from packages.port_sim.fifo_baseline import run_fifo
 from packages.autopsy_sdk import get_trace_count
 
 
@@ -70,36 +67,25 @@ def main():
     print(f"     Hazmat:     {hazmat_count}")
     print(f"     Customs blocked: {customs_blocked}")
 
-    # -- Run decentralised negotiation --
+    # -- Run agents + FIFO via the shared runner (computes real metrics, saves
+    #    a snapshot with agent_metrics/fifo_metrics so /metrics works too) --
     print(f"\n  Running decentralised negotiation...")
-    resources = PortResources()
-    loop = NegotiationLoop(containers, resources)
-    allocs = loop.run()
+    from packages.port_sim.runner import run_simulation
     eligible = 200 - customs_blocked
-    print(f"     [OK] Allocated {len(allocs)}/{eligible} eligible containers")
-    print(f"     {get_trace_count()} trace events recorded")
-    print(f"     {len(loop.round_history)} rounds across {loop.round_history[-1]['wave'] + 1 if loop.round_history else 0} waves")
-    if loop.violations:
-        print(f"     ⚠ {len(loop.violations)} constraint violations detected")
-        for v in loop.violations[:3]:
-            print(f"       - {v['type']}: {v['detail']}")
+    result = run_simulation(200, save=True)
+    am, fm = result["agent_metrics"], result["fifo_metrics"]
 
-    # -- Save state for counterfactual replay --
-    snap = loop.snapshot()
-    SAVED_STATE.write_text(json.dumps(snap, default=str), encoding="utf-8")
+    print(f"     [OK] Allocated {result['allocated']}/{result['eligible']} eligible containers")
+    print(f"     {get_trace_count()} trace events recorded")
     print(f"     State saved to {SAVED_STATE}")
 
-    # -- Run FIFO baseline --
     print(f"\n  Running FIFO baseline...")
-    fifo_resources = PortResources()
-    fifo_allocs = run_fifo(containers, fifo_resources)
-    print(f"     [OK] FIFO allocated {len(fifo_allocs)}/{eligible} eligible containers")
+    print(f"     [OK] FIFO allocated {fm['allocated']}/{fm['eligible']} eligible containers")
 
-    # -- Comparison --
-    improvement = (
-        (len(allocs) - len(fifo_allocs)) / max(len(fifo_allocs), 1) * 100
-    )
-    print(f"\n  Multi-agent is {improvement:+.0f}% vs FIFO")
+    # -- Comparison: the real win is constraint compliance, not raw throughput --
+    print(f"\n  Cold-chain violations  —  Agent: {am['violations']}   FIFO: {fm['violations']}")
+    print(f"  Both engines place ~all cargo, but FIFO breaks the cold chain "
+          f"{fm['violations']}× by ignoring refrigeration.")
     print(f"\n  [OK] Simulation complete!")
     print(f"     Traces: traces.jsonl, traces.db")
     print(f"     State:  saved_state.json")
